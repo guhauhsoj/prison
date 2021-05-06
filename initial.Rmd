@@ -8,28 +8,112 @@ output: pdf_document
 library(tidyverse)
 library(furrr)
 library(readxl)
+library(magrittr)
 ```
 
 
 
 ```{r}
+
+# initial clean of data
+# read in prison data
 prison <- read.csv(file = "./data/california_jail_survey_1995_2020_csv/california_jail_county_monthly_1995_2020.csv")
 head(prison)
 
-county <- read.csv(file = "./data/County_-_Revenues.csv")
-head(county)
+# read in revenue data
+revenue <- read.csv(file = "./data/County_Revenues_Per_Capita.csv")
 
-onlyrev <- county %>% group_by(Fiscal.Year,Entity.Name) %>% summarise(overall = sum(Values))
+# read in GDP it is 2017 
 
-seventeenrev <- onlyrev %>% filter(Fiscal.Year == 2017)
+calgdp <- read.csv("./data/gdpcali.csv",col.names = c("California", "GDP"))
 
-seventeenpri <- prison %>% filter(year == 2017)
-
-seventeenpri %>% group_by(fips_county_code) %>% summarise_at(vars(avg_daily_pop_sentenced_male,avg_daily_pop_sentenced_male),.funs = mean)
+calgdp$GDP <- as.numeric(gsub(",","",calgdp$GDP))
 
 
-head(prison)
+# filter revenue to 2017 and take out the counties that have no revenue
+rev17 <- revenue %>% filter(Fiscal.Year == 2017) %>% filter(Entity.Name != "Alpine" & Entity.Name != "Sierra")
 
+# filter prison to 2017 and take out countiees that have no prison
+prison17 <- prison %>% filter(year == 2017) %>% filter(census_county_name !=  "San Francisco County")
+
+
+avgpop <- prison17 %>% group_by(census_county_name) %>% summarise_at(vars(avg_daily_pop_sentenced_male,avg_daily_pop_sentenced_female,avg_felony_inmate_total),.funs = mean)
+
+
+together <- cbind(calgdp,avgpop,rev17)
+
+together %<>% mutate(gdppc = GDP/Estimated.Population) 
+
+colnames(prison17)
+```
+
+
+```{r}
+prisonvars <- prison17 %>% group_by(census_county_name) %>% 
+  mutate(avg_daily_unsentenced = avg_daily_pop_unsentenced_female+avg_daily_pop_unsentenced_male) %>%   mutate(avg_daily_sentenced = avg_daily_pop_sentenced_female+avg_daily_pop_sentenced_male) %>% summarise_at(vars(avg_daily_unsentenced,avg_daily_sentenced,avg_felony_inmate_total),.funs = mean)
+
+together <- cbind(calgdp,prisonvars,rev17)
+
+together %<>% mutate(avg_daily_unsentenced_pc = avg_daily_unsentenced/Estimated.Population, 
+                     avg_daily_sentenced_pc = avg_daily_sentenced/Estimated.Population,
+                     avg_felony_inmate_total_pc = avg_felony_inmate_total/Estimated.Population,
+                     gdppc = GDP/Estimated.Population) 
+
+fit1 <- lm(Revenues.Per.Capita ~ avg_daily_unsentenced_pc + avg_daily_sentenced_pc, 
+           data = together)
+
+
+summary(fit1)
+
+fit2 <- lm(Revenues.Per.Capita ~ avg_daily_unsentenced_pc + avg_daily_sentenced_pc+
+             avg_felony_inmate_total_pc, 
+           data = together)
+
+summary(fit2)
+
+
+fit3 <- lm(Revenues.Per.Capita ~  avg_daily_sentenced_pc+
+             avg_felony_inmate_total_pc, 
+           data = together)
+
+summary(fit3)
+
+
+# relationship between GDP and revenue 
+
+fit4 <- lm(Revenues.Per.Capita~gdppc, data =together)
+
+summary(fit4)
+
+together %>% ggplot(aes(x=Revenues.Per.Capita,y=gdppc))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+# the same fits with gdp
+
+fit5 <- lm(gdppc ~ avg_daily_unsentenced_pc + avg_daily_sentenced_pc, 
+           data = together)
+
+
+summary(fit5)
+
+fit6 <- lm(gdppc ~ avg_daily_unsentenced_pc + avg_daily_sentenced_pc+
+             avg_felony_inmate_total_pc, 
+           data = together)
+
+summary(fit6)
+
+
+fit7 <- lm(gdppc ~  avg_daily_sentenced_pc+
+             avg_felony_inmate_total_pc, 
+           data = together)
+
+summary(fit7)
+
+
+fit8 <- lm(gdppc~  avg_felony_inmate_total_pc, data = together)
+
+summary(fit8)
 ```
 
 
