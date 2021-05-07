@@ -45,6 +45,8 @@ together <- cbind(calgdp,avgpop,rev17)
 together %<>% mutate(gdppc = GDP/Estimated.Population) 
 
 colnames(prison17)
+
+
 ```
 
 
@@ -91,18 +93,19 @@ together %>% ggplot(aes(x=Revenues.Per.Capita,y=gdppc))+
 
 # the same fits with gdp
 
-fit5 <- lm(gdppc ~ avg_daily_unsentenced_pc + avg_daily_sentenced_pc, 
+fit5 <- lm(log(gdppc) ~ avg_daily_unsentenced_pc + avg_daily_sentenced_pc, 
            data = together)
-
 
 summary(fit5)
 
-fit6 <- lm(gdppc ~ avg_daily_unsentenced_pc + avg_daily_sentenced_pc+
+plot(fit5)
+
+
+fit6 <- lm(log(gdppc) ~ avg_daily_unsentenced_pc + avg_daily_sentenced_pc+
              avg_felony_inmate_total_pc, 
            data = together)
 
 summary(fit6)
-
 
 fit7 <- lm(gdppc ~  avg_daily_sentenced_pc+
              avg_felony_inmate_total_pc, 
@@ -114,7 +117,54 @@ summary(fit7)
 fit8 <- lm(gdppc~  avg_felony_inmate_total_pc, data = together)
 
 summary(fit8)
+
+plot(fit8)
+
+
 ```
 
 
+
+How many mental health case as a response where we have 
+longitudinal data, as taking each measurement per month of a prison as a subject
+each prison is a subject. We would need to adjust for population of prison somehow, 
+the rate of mental health cases? 
+
+```{r}
+
+# make prisons factor
+prison$jurisdiction <- as.factor(prison$jurisdiction)
+
+
+
+# we can try an imputation approach
+
+prisonMentH <- prison %>% mutate(mental_health_rate = mental_heath_case_open_end_month/highest_inmate_count) 
+
+
+colnames(prisonMentH)
+
+
+
+# lmer output
+
+prisonMentH %<>% mutate(avg_daily_pop_unsentenced_male=scale(avg_daily_pop_unsentenced_male),avg_daily_pop_sentenced_male=scale(avg_daily_pop_sentenced_male)) 
+
+lmef <- lme4::lmer(formula =  mental_health_rate ~ (1+ avg_daily_pop_unsentenced_male+avg_daily_pop_sentenced_male|jurisdiction),data = prisonMentH)
+
+summary(lmef)
+
+coefficients(lmef)
+
+library(gee)
+
+gef <- gee(formula = mental_health_rate ~ 1+ avg_daily_pop_unsentenced_male+avg_daily_pop_sentenced_male, id =jurisdiction, data = prisonMentH,corstr = "independence")
+
+summary(gef)
+
+
+library(geepack)
+
+geepack::geeglm(formula = mental_health_rate ~ 1+ avg_daily_pop_unsentenced_male+avg_daily_pop_sentenced_male, id =jurisdiction, data = prisonMentH)
+```
 
