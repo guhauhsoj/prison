@@ -47,18 +47,22 @@ together %<>% mutate(gdppc = GDP/Estimated.Population)
 colnames(prison17)
 
 
+
+
 ```
+
 
 
 ```{r}
 prisonvars <- prison17 %>% group_by(census_county_name) %>% 
-  mutate(avg_daily_unsentenced = avg_daily_pop_unsentenced_female+avg_daily_pop_unsentenced_male) %>%   mutate(avg_daily_sentenced = avg_daily_pop_sentenced_female+avg_daily_pop_sentenced_male) %>% summarise_at(vars(avg_daily_unsentenced,avg_daily_sentenced,avg_felony_inmate_total),.funs = mean)
+  mutate(avg_daily_unsentenced = avg_daily_pop_unsentenced_female+avg_daily_pop_unsentenced_male) %>%   mutate(avg_daily_sentenced = avg_daily_pop_sentenced_female+avg_daily_pop_sentenced_male) %>% summarise_at(vars(avg_daily_unsentenced,avg_daily_sentenced,avg_felony_inmate_total,avg_fed_inmate_housed_contract),.funs = mean)
 
 together <- cbind(calgdp,prisonvars,rev17)
 
 together %<>% mutate(avg_daily_unsentenced_pc = avg_daily_unsentenced/Estimated.Population, 
                      avg_daily_sentenced_pc = avg_daily_sentenced/Estimated.Population,
                      avg_felony_inmate_total_pc = avg_felony_inmate_total/Estimated.Population,
+                     avg_fed_inmate_housed_contract_pc = avg_fed_inmate_housed_contract/Estimated.Population,
                      gdppc = GDP/Estimated.Population) 
 
 fit1 <- lm(Revenues.Per.Capita ~ avg_daily_unsentenced_pc + avg_daily_sentenced_pc, 
@@ -120,6 +124,17 @@ summary(fit8)
 
 plot(fit8)
 
+# federal housing and revenue
+
+fit9<- lm(Revenues.Per.Capita~avg_fed_inmate_housed_contract_pc,data = together)
+
+
+summary(fit9)
+
+together %>% ggplot(aes(x=avg_fed_inmate_housed_contract,y=Revenues.Per.Capita))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
 
 ```
 
@@ -167,4 +182,40 @@ library(geepack)
 
 geepack::geeglm(formula = mental_health_rate ~ 1+ avg_daily_pop_unsentenced_male+avg_daily_pop_sentenced_male, id =jurisdiction, data = prisonMentH)
 ```
+
+GEE vs LMER?
+
+Mental health in prisons?
+
+
+Regress County revenue on housing contracts
+
+GO GET COUNTY LEVEL:
+
+Poverty rate 
+Crime rate
+Median income 
+Education level
+
+
+
+Poverty data
+
+```{r}
+pov <- read_csv(file = "./data/povdata.txt",col_names = F)
+pov
+
+str_split()
+x <- apply(pov,1,str_split,pattern = " ")
+
+
+y <- unlist(x,recursive = FALSE)
+y <- lapply(y, function(z){z[z!=""]})
+
+
+povertydf <- data.frame(do.call(rbind,y))
+
+povertydf
+```
+
 
