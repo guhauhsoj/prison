@@ -218,4 +218,13 @@ povertydf <- data.frame(do.call(rbind,y))
 povertydf
 ```
 
+Current Goals:
+
+
+1. Interpret all the simple OLS we did.
+2. Use the extra covariates with Lasso and the SeletiveInference package
+3. Use GEE to do across all the prison system, compare with multilevel model
+4. What to do with other years?
+Another GEE with multiple years, where each county is a group and we have an observation every year.
+
 
