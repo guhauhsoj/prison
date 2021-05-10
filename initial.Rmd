@@ -23,6 +23,7 @@ head(prison)
 # read in revenue data
 revenue <- read.csv(file = "./data/County_Revenues_Per_Capita.csv")
 
+
 # read in GDP it is 2017 
 
 calgdp <- read.csv("./data/gdpcali.csv",col.names = c("California", "GDP"))
@@ -203,9 +204,9 @@ Poverty data
 
 ```{r}
 pov <- read_csv(file = "./data/povdata.txt",col_names = F)
-pov
 
-str_split()
+
+
 x <- apply(pov,1,str_split,pattern = " ")
 
 
@@ -215,7 +216,18 @@ y <- lapply(y, function(z){z[z!=""]})
 
 povertydf <- data.frame(do.call(rbind,y))
 
-povertydf
+
+
+cnames <- c("FIPS State Code", "FIPS county code","all ages in poverty","LB90CI all ages pov","UB90CI all ages pov",
+              "% all ages", "LB90CI percent all ages pov","UB90CI percent all ages pov", 
+              " 0-17 in poverty","LB90CI 0-17 pov","UB90CI 0-17 pov",
+              "% 0-17", "LB90CI % 0-17 pov","UB90CI % 0-17 pov",
+              "5-17 pov", "LB90CI children pov","UB90CI children pov","% 5-17", "LB90CI 5-17 % pov","UB90CI 5-17 % pov",
+              "MHI", "90LB MHI", "90UB MHI")
+
+colnames(povertydf) <- cnames
+
+povertydf$`FIPS county code` <- as.numeric(povertydf$`FIPS county code`)
 ```
 
 Current Goals:
@@ -226,5 +238,128 @@ Current Goals:
 3. Use GEE to do across all the prison system, compare with multilevel model
 4. What to do with other years?
 Another GEE with multiple years, where each county is a group and we have an observation every year.
+
+# FIRST FIX THE ONE DATASET BY GETTING IT A STUPID FIPS ROW
+
+```{r RUN FIRST CHUNK TO RUN THIS}
+
+
+countiesrevenues <-
+  c("Alameda",
+    "Amador",
+    "Butte",
+    "Calaveras",
+    "Colusa",
+    "Contra Costa",
+    "Del Norte",
+    "El Dorado",
+    "Fresno",
+    "Glenn",
+    "Humboldt",
+    "Imperial",
+    "Inyo",
+    "Kern",
+    "Kings",
+    "Lake",
+    "Lassen",
+    "Los Angeles",
+    "Madera",
+    "Marin",
+    "Mariposa",
+    "Mendocino",
+    "Merced",
+    "Modoc" ,
+    "Mono"   ,
+    "Monterey"     ,
+    "Napa" ,
+    "Nevada" ,
+    "Orange"      ,
+    "Placer"    ,
+    "Plumas"    ,
+    "Riverside" ,
+    "Sacramento"     ,
+    "San Benito",
+    "San Bernardino" ,
+    "San Diego"  ,
+    "San Joaquin",
+    "San Luis Obispo" ,
+    "San Mateo"  ,
+    "Santa Barbara",
+    "Santa Clara" ,
+    "Santa Cruz",
+    "Shasta"    ,
+    "Siskiyou"  ,
+    "Solano"     ,
+    "Sonoma",
+    "Stanislaus"     ,
+    "Sutter"  ,
+    "Tehama"     ,
+    "Trinity"      ,
+    "Tulare"     ,
+    "Tuolumne" ,
+    "Ventura"    ,
+    "Yolo"   ,
+    "Yuba"
+  )
+
+countyFIPS <- sort(unique(prison17$fips_county_code))
+
+countyFIPStable <- data.frame(Entity.Name = countiesrevenues,countyFIPS)
+
+
+
+```
+
+
+
+
+
+
+
+```{r}
+# multiple years GEE part 4
+
+
+# initial clean of data
+# read in prison data
+prison <- read.csv(file = "./data/california_jail_survey_1995_2020_csv/california_jail_county_monthly_1995_2020.csv")
+head(prison)
+
+# read in revenue data
+revenue <- read.csv(file = "./data/County_Revenues_Per_Capita.csv")
+
+# JOIN THE REVENUE WITH FIPS 
+
+revenue <- inner_join(revenue,countyFIPStable, by = c("Entity.Name"))
+
+revenue %<>% mutate(fips_county_code=countyFIPS.x)
+
+
+
+# take out the counties that have no revenue
+revall <- revenue  %>% filter(Entity.Name != "Alpine" & Entity.Name != "Sierra")%>% 
+  filter(Fiscal.Year <= 2019 & Fiscal.Year >=2005) %>% mutate(year = Fiscal.Year)
+
+
+
+
+# filter prison to other years and take out countiees that have no prison
+prisonall <- prison %>% filter(census_county_name !=  "San Francisco County") %>% 
+  filter(year <= 2019 & year >=2005) %>% arrange(census_county_name)
+
+
+avgpop <- prisonall %>% group_by(fips_county_code,year) %>%
+  summarise_at(vars(avg_daily_pop_sentenced_male,avg_daily_pop_sentenced_female,avg_felony_inmate_total),.funs = mean)
+
+
+
+
+together <- inner_join(avgpop,revall,by = c("fips_county_code","year"))
+
+together
+
+```
+
+
 
 
