@@ -142,7 +142,9 @@ gdpcalifclean <- gdpcalif %>% filter(Description == "All industry total") %>%
 
 revAndGDP <- inner_join(gdpcalifclean,revenueclean,by = c("fips_county_code","year"))
 
-combinedData <- inner_join(revAndGDP,)
+combinedData <- inner_join(revAndGDP,revenueclean,by = c("fips_county_code","year"))
+
+
 
 ```
 
