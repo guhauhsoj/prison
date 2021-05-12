@@ -349,17 +349,38 @@ prisonall <- prison %>% filter(census_county_name !=  "San Francisco County") %>
 
 
 avgpop <- prisonall %>% group_by(fips_county_code,year) %>%
-  summarise_at(vars(avg_daily_pop_sentenced_male,avg_daily_pop_sentenced_female,avg_felony_inmate_total),.funs = mean)
-
-
+  summarise_at(vars(avg_daily_pop_sentenced_male,avg_daily_pop_sentenced_female,avg_felony_inmate_total,highest_inmate_count),.funs = mean)
 
 
 together <- inner_join(avgpop,revall,by = c("fips_county_code","year"))
 
-together
+
+together %<>% mutate(avg_daily_pop_sentenced_male_pc = avg_daily_pop_sentenced_male/highest_inmate_count,
+                   avg_daily_pop_sentenced_female_pc =  avg_daily_pop_sentenced_female/highest_inmate_count,
+                    revPerPrisoner = Total.Revenues/highest_inmate_count)
+
+
 
 ```
 
 
+
+```{r}
+library(gee)
+multi <- gee(revPerPrisoner ~ avg_daily_pop_sentenced_male_pc + avg_daily_pop_sentenced_female_pc,data = together, id =fips_county_code)
+
+summary(multi)
+
+
+library(lme4)
+multilme <- lmer(revPerPrisoner ~ (1|fips_county_code) +avg_daily_pop_sentenced_male_pc + avg_daily_pop_sentenced_female_pc, data = together)
+
+summary(multilme)
+
+
+multilmersl <- lmer(revPerPrisoner ~ (1 +avg_daily_pop_sentenced_male_pc |fips_county_code), data = together)
+summary(multilmersl)
+
+```
 
 

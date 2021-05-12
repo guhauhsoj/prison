@@ -1,0 +1,154 @@
+---
+title: "Final Analysis"
+author: "J.E. Hug"
+date: "5/11/2021"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+library(tidyverse)
+library(furrr)
+library(readxl)
+library(magrittr)
+library(gee)
+library(lme4)
+library(rstanarm)
+```
+
+
+# The Cleaning of the initial data
+
+```{r prison data}
+# read in prison data
+prison <- read.csv(file = "./data/california_jail_survey_1995_2020_csv/california_jail_county_monthly_1995_2020.csv")
+
+# San Francisco county has no revenue
+prison %<>% filter(census_county_name !=  "San Francisco County") %>% 
+  filter(year <= 2019 & year >=2005)
+
+# group by county and aggregate into yearly data
+
+prisonByCounty <- prison %>% 
+  filter(year <= 2019 & year >=2005)
+
+# now can aggregate by variable into yearly data
+
+
+prisonclean <- prisonByCounty %>% group_by(fips_county_code,year) %>%
+  select(-c(jurisdiction,month,date,census_county_name,fips_state_code,fips_state_county_code)) %>% 
+  summarise_all(.funs = mean)
+
+
+```
+
+
+```{r revenue data}
+# make a county FIPS column that we can join on
+countiesrevenues <-
+  c("Alameda",
+    "Amador",
+    "Butte",
+    "Calaveras",
+    "Colusa",
+    "Contra Costa",
+    "Del Norte",
+    "El Dorado",
+    "Fresno",
+    "Glenn",
+    "Humboldt",
+    "Imperial",
+    "Inyo",
+    "Kern",
+    "Kings",
+    "Lake",
+    "Lassen",
+    "Los Angeles",
+    "Madera",
+    "Marin",
+    "Mariposa",
+    "Mendocino",
+    "Merced",
+    "Modoc" ,
+    "Mono"   ,
+    "Monterey"     ,
+    "Napa" ,
+    "Nevada" ,
+    "Orange"      ,
+    "Placer"    ,
+    "Plumas"    ,
+    "Riverside" ,
+    "Sacramento"     ,
+    "San Benito",
+    "San Bernardino" ,
+    "San Diego"  ,
+    "San Joaquin",
+    "San Luis Obispo" ,
+    "San Mateo"  ,
+    "Santa Barbara",
+    "Santa Clara" ,
+    "Santa Cruz",
+    "Shasta"    ,
+    "Sierra"  ,
+    "Siskiyou"  ,
+    "Solano"     ,
+    "Sonoma",
+    "Stanislaus"     ,
+    "Sutter"  ,
+    "Tehama"     ,
+    "Trinity"      ,
+    "Tulare"     ,
+    "Tuolumne" ,
+    "Ventura",
+    "Yolo",
+    "Yuba"
+  )
+
+countyFIPS <- sort(unique(prison$fips_county_code))
+
+countyFIPStable <- data.frame(Entity.Name = countiesrevenues,fips_county_code = countyFIPS)
+
+revenue <- read.csv(file = "./data/County_Revenues_Per_Capita.csv")
+
+revenue %<>% filter(Entity.Name!=  "Alpine") %>% 
+  filter(Fiscal.Year <= 2019 & Fiscal.Year >=2005) %>% 
+  mutate(year = Fiscal.Year) %>% select(-Fiscal.Year)
+
+revenueclean <- inner_join(revenue,countyFIPStable, by = c("Entity.Name"))
+
+```
+
+
+
+```{r gdp data}
+gdpcalif <- read.csv("./data/gdpcalif.csv")
+
+gdpcalifclean <- gdpcalif %>% filter(Description == "All industry total") %>% 
+  mutate(fips_county_code=as.numeric(GeoFIPS)-6000) %>% 
+  filter(fips_county_code != 0) %>% 
+  select(-c(Description,Unit,Region,TableName,GeoFIPS,GeoName,
+            IndustryClassification, LineCode)) %>% 
+  pivot_longer(cols=-c(fips_county_code)) %>% rename(GDP = value) %>% 
+  mutate(year =as.numeric(str_split(name,"X",simplify = TRUE)[str_split(name,"X",simplify = TRUE)!= ""])) %>% 
+  filter(year <= 2019 & year >=2005)
+```
+
+
+
+
+
+
+```{r}
+# Put all 3 datasets together
+
+revAndGDP <- inner_join(gdpcalifclean,revenueclean,by = c("fips_county_code","year"))
+
+combinedData <- inner_join(revAndGDP,)
+
+```
+
+
+
+
+
+
+
