@@ -12,7 +12,7 @@ library(readxl)
 library(magrittr)
 library(gee)
 library(lme4)
-library(rstanarm)
+library(glmnet)
 ```
 
 
@@ -129,7 +129,9 @@ gdpcalifclean <- gdpcalif %>% filter(Description == "All industry total") %>%
             IndustryClassification, LineCode)) %>% 
   pivot_longer(cols=-c(fips_county_code)) %>% rename(GDP = value) %>% 
   mutate(year =as.numeric(str_split(name,"X",simplify = TRUE)[str_split(name,"X",simplify = TRUE)!= ""])) %>% 
-  filter(year <= 2019 & year >=2005)
+  filter(year <= 2019 & year >=2005) %>% mutate(GDP = as.numeric(GDP)) %>% 
+  select(-name)
+
 ```
 
 
@@ -142,9 +144,139 @@ gdpcalifclean <- gdpcalif %>% filter(Description == "All industry total") %>%
 
 revAndGDP <- inner_join(gdpcalifclean,revenueclean,by = c("fips_county_code","year"))
 
-combinedData <- inner_join(revAndGDP,revenueclean,by = c("fips_county_code","year"))
+combinedData <- inner_join(revAndGDP,prisonclean,by = c("fips_county_code","year"))
+
+# cut variables with all NA
+combinedData %<>%  mutate(GDP.Per.Capita = GDP/Estimated.Population) %>%
+  select(-c(avg_inmate_need_reg_med_attent,adp_of_maximum_security_inmates,
+            adp_of_medium_security_inmates,avg_inmates_get_mental_heath_bed,
+            total_juv_in_custody,avg_own_inmate_housed_elsewhere,
+            avg_fed_inmate_housed_contract,avg_state_inmate_housed_contract,
+            avg_local_inmate_housed_contract, avg_inmate_wait_transport_prison,
+            adp_of_minimum_security_inmates, avg_inmates_get_medical_bed,
+            avg_inmates_need_reg_ment_health,day_of_highest_count))
+
+summary(combinedData)
+
+# standardized
+combinedDataal <- combinedData %>% select(-
+    c(fips_county_code,
+    GDP,
+    year,
+    Entity.Name,
+    Total.Revenues,
+    Estimated.Population,
+    Revenues.Per.Capita,
+    GDP.Per.Capita,
+    highest_inmate_count)) %>% 
+  mutate_all(function(x) x/combinedData$highest_inmate_count) %>% 
+  mutate(fips_county_code = combinedData$fips_county_code,year = combinedData$year)
+
+combinedDataal
+
+combinedStandard <- inner_join(revAndGDP,combinedDataal, by = c("fips_county_code","year")) %>% 
+  mutate(GDP.Per.Capita = GDP/Estimated.Population)
 
 
+
+
+
+# response
+# a) GDPpc
+# b)  Revpc
+# c) Mental health one standardized
+
+# 1. Naive linear regression 
+
+formula1 <- log(GDP.Per.Capita) ~ avg_daily_pop_unsentenced_male + avg_daily_pop_unsentenced_female+avg_daily_pop_sentenced_male+
+  avg_daily_pop_sentenced_male+ avg_daily_pop_sentenced_female +  avg_daily_pop_total_jurisdiction+
+  avg_felony_inmate_unsentenced  +  avg_felony_inmate_sentenced  +   avg_felony_inmate_total
+
+
+formula2 <- log(Revenues.Per.Capita) ~ avg_daily_pop_unsentenced_male + avg_daily_pop_unsentenced_female+avg_daily_pop_sentenced_male+
+  avg_daily_pop_sentenced_male+ avg_daily_pop_sentenced_female +  avg_daily_pop_total_jurisdiction+
+  avg_felony_inmate_unsentenced  +  avg_felony_inmate_sentenced  +   avg_felony_inmate_total
+
+
+formula3 <- num_new_mental_health_cases ~ avg_daily_pop_unsentenced_male + avg_daily_pop_unsentenced_female+avg_daily_pop_sentenced_male+
+  avg_daily_pop_sentenced_male+ avg_daily_pop_sentenced_female +  avg_daily_pop_total_jurisdiction+
+  avg_felony_inmate_unsentenced  +  avg_felony_inmate_sentenced  +   avg_felony_inmate_total
+
+colnames(combinedStandard)
+
+# heteroskedasticity???
+lm1 <- lm(formula1, data = combinedStandard)
+summary(lm1)
+
+
+lm2 <- lm(formula2, data = combinedStandard)
+summary(lm2)
+
+lm3 <-lm(formula3, data = combinedStandard)
+summary(lm3)
+
+
+# 2. Lasso or Ridge (glmnet)
+
+lassocov <- combinedStandard %>% 
+  select(avg_daily_pop_unsentenced_male ,avg_daily_pop_unsentenced_female,avg_daily_pop_sentenced_male,
+  avg_daily_pop_sentenced_male, avg_daily_pop_sentenced_female ,  avg_daily_pop_total_jurisdiction,
+  avg_felony_inmate_unsentenced  ,  avg_felony_inmate_sentenced  ,   avg_felony_inmate_total)
+
+bm1 <- na.omit(cbind(log(combinedStandard$GDP),as.matrix(lassocov)))
+
+lass1 <- glmnet(y= bm1[,1], x= bm1[,2:ncol(bm1)], alpha = 1)
+lambda=cv.glmnet(bm1[,2:ncol(bm1)], bm1[,1])$lambda.1se
+
+
+library(selectiveInference)
+
+selinf1 <- fixedLassoInf(x = bm1[,2:ncol(bm1)],y= bm1[,1], beta = coef(lass1,s=lambda/nrow(bm1))[-1],lambda = lambda)
+
+coef(lass1,s=lambda/nrow(bm1))
+colnames(combinedStandard)
+# 3. GEE (gee package)
+
+gee1 <- gee(formula1, data = combinedStandard, id = fips_county_code,corstr = "independence")
+summary(gee1)
+
+
+gee2 <- gee(formula2, data = combinedStandard, id = fips_county_code ,corstr = "independence")
+summary(gee2)
+
+gee3 <- gee(formula3, data = combinedStandard, id = fips_county_code,corstr = "independence" )
+summary(gee3)
+
+
+# 4. MLM (lme4 package)
+
+
+mformula1 <- log(GDP.Per.Capita) ~ (1|fips_county_code)+avg_daily_pop_unsentenced_male + avg_daily_pop_unsentenced_female+avg_daily_pop_sentenced_male+
+  avg_daily_pop_sentenced_male+ avg_daily_pop_sentenced_female +  avg_daily_pop_total_jurisdiction+
+  avg_felony_inmate_unsentenced  +  avg_felony_inmate_sentenced  +   avg_felony_inmate_total
+
+
+mformula2 <- log(Revenues.Per.Capita) ~ (1|fips_county_code)+avg_daily_pop_unsentenced_male + avg_daily_pop_unsentenced_female+avg_daily_pop_sentenced_male+
+  avg_daily_pop_sentenced_male+ avg_daily_pop_sentenced_female +  avg_daily_pop_total_jurisdiction+
+  avg_felony_inmate_unsentenced  +  avg_felony_inmate_sentenced  +   avg_felony_inmate_total
+
+
+mformula3 <- num_new_mental_health_cases ~ (1|fips_county_code)+avg_daily_pop_unsentenced_male + avg_daily_pop_unsentenced_female+avg_daily_pop_sentenced_male+
+  avg_daily_pop_sentenced_male+ avg_daily_pop_sentenced_female +  avg_daily_pop_total_jurisdiction+
+  avg_felony_inmate_unsentenced  +  avg_felony_inmate_sentenced  +   avg_felony_inmate_total
+
+mlm1 <- lmer(mformula1,data = combinedStandard)
+summary(mlm1)
+
+mlm2 <- lmer(mformula2,data = combinedStandard)
+summary(mlm2)
+
+mlm3 <- lmer(mformula3,data = combinedStandard)
+summary(mlm3)
+
+
+
+# standardize all coefficients with the prison population
 
 ```
 
