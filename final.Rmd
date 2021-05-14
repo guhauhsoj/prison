@@ -6,7 +6,7 @@ output: html_document
 ---
 
 
-This can be entirely run by keeping the current working directories
+This can be entirely run making sure the 3 csv's are in a folder called "data" within the current working directory of this Rmd file.
 
 ```{r setup, include=TRUE}
 library(tidyverse) # data manipulation and plotting
